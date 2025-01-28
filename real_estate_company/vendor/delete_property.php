@@ -10,8 +10,8 @@ if (!isset($_SESSION['user'])) {
 $property_id = $_POST['property_id'];
 $user_id = $_SESSION['user']['id'];
 
-// Проверяем, принадлежит ли объект текущему пользователю и имеет статус 'new'
-$check_property = $connect->query("SELECT * FROM properties WHERE id = $property_id AND user_id = $user_id AND status = 'new'");
+// Проверяем, принадлежит ли объект текущему пользователю
+$check_property = $connect->query("SELECT * FROM properties WHERE id = $property_id AND user_id = $user_id");
 if ($check_property->num_rows > 0) {
     $property = mysqli_fetch_assoc($check_property);
     

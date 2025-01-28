@@ -3,7 +3,7 @@
 -- https://www.phpmyadmin.net/
 --
 -- Хост: 127.0.0.1:3306
--- Время создания: Янв 28 2025 г., 14:27
+-- Время создания: Янв 28 2025 г., 16:21
 -- Версия сервера: 8.0.15
 -- Версия PHP: 7.1.32
 
@@ -25,24 +25,24 @@ SET time_zone = "+00:00";
 -- --------------------------------------------------------
 
 --
--- Структура таблицы `clients`
+-- Структура таблицы `applications`
 --
 
-CREATE TABLE `clients` (
+CREATE TABLE `applications` (
   `id` int(11) NOT NULL,
-  `fio` varchar(255) NOT NULL,
-  `number` varchar(255) NOT NULL,
-  `appdate` date DEFAULT NULL
+  `client_name` varchar(255) NOT NULL,
+  `phone` varchar(20) NOT NULL,
+  `property_id` int(11) NOT NULL,
+  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 --
--- Дамп данных таблицы `clients`
+-- Дамп данных таблицы `applications`
 --
 
-INSERT INTO `clients` (`id`, `fio`, `number`, `appdate`) VALUES
-(6, 'Дагин', '70000000000', '2024-06-24'),
-(8, 'впрвапвапвапав', '7000000', '2024-06-24'),
-(9, 'nikitos', '7000', '2025-01-27');
+INSERT INTO `applications` (`id`, `client_name`, `phone`, `property_id`) VALUES
+(2, 'БДС', '7', 8),
+(3, 'НТС', '8', 9);
 
 -- --------------------------------------------------------
 
@@ -59,23 +59,24 @@ CREATE TABLE `properties` (
   `price` decimal(12,2) NOT NULL,
   `area` decimal(8,2) NOT NULL,
   `rooms` int(11) NOT NULL,
-  `status` varchar(10) DEFAULT 'new',
   `image` varchar(255) DEFAULT NULL,
   `land_category` enum('settlement','agricultural','industrial') DEFAULT NULL,
   `security` enum('with_security','without_security') DEFAULT NULL,
   `commercial_type` enum('office','retail','warehouse') DEFAULT NULL,
   `floors` int(11) DEFAULT NULL,
   `material` enum('brick','stone','log') DEFAULT NULL,
-  `land_area` float DEFAULT NULL
+  `land_area` float DEFAULT NULL,
+  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
+  `buyer_application_id` int(11) DEFAULT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 --
 -- Дамп данных таблицы `properties`
 --
 
-INSERT INTO `properties` (`id`, `user_id`, `type`, `address`, `district`, `price`, `area`, `rooms`, `status`, `image`, `land_category`, `security`, `commercial_type`, `floors`, `material`, `land_area`) VALUES
-(6, 1, 'house', 'ппвап', 'Ленинский', '17.00', '177.00', 5, 'new', 'uploads/67978efa0e891.jpeg', NULL, NULL, NULL, NULL, NULL, NULL),
-(7, 1, 'house', 'апавпа', 'Устиновский', '177777.00', '253.00', 17, 'new', 'uploads/679793426e9bd.jpg', NULL, NULL, NULL, 3, 'brick', 557);
+INSERT INTO `properties` (`id`, `user_id`, `type`, `address`, `district`, `price`, `area`, `rooms`, `image`, `land_category`, `security`, `commercial_type`, `floors`, `material`, `land_area`, `buyer_application_id`) VALUES
+(8, 1, 'house', 'парапрап', 'Ленинский', '17.00', '17.00', 14, 'uploads/6798d432ec296.jpg', NULL, NULL, NULL, 3, 'brick', 255, 2),
+(9, 1, 'apartment', 'аппапп', 'Октябрьский', '1777777.00', '52.00', 2, 'uploads/6798d5ce3efb7.jpg', NULL, NULL, NULL, NULL, NULL, NULL, 3);
 
 -- --------------------------------------------------------
 
@@ -85,20 +86,22 @@ INSERT INTO `properties` (`id`, `user_id`, `type`, `address`, `district`, `price
 
 CREATE TABLE `reviews` (
   `id` int(11) NOT NULL,
-  `fio` varchar(255) DEFAULT NULL,
   `title` varchar(255) DEFAULT NULL,
   `review` varchar(255) DEFAULT NULL,
-  `property_id` int(11) DEFAULT NULL
+  `property_id` int(11) DEFAULT NULL,
+  `application_id` int(11) DEFAULT NULL,
+  `seller_name` varchar(255) DEFAULT NULL,
+  `buyer_name` varchar(255) DEFAULT NULL,
+  `status` varchar(20) DEFAULT 'new'
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 --
 -- Дамп данных таблицы `reviews`
 --
 
-INSERT INTO `reviews` (`id`, `fio`, `title`, `review`, `property_id`) VALUES
-(1, 'БДСМ', 'ХАХ', 'АХАХАХАХАХАХАХАХАХАХАХАХАХАХАХА)))', NULL),
-(2, 'некнекнке', 'екнекнек', 'кененкенкен', NULL),
-(3, 'укекуеук', 'екуекуекуеук', 'еукекуекуе', NULL);
+INSERT INTO `reviews` (`id`, `title`, `review`, `property_id`, `application_id`, `seller_name`, `buyer_name`, `status`) VALUES
+(7, 'пам', 'пам', 8, NULL, 'Багин Даниил Станиславович', 'БДС', 'rejected'),
+(8, 'прпарап', 'апрпарап', 9, NULL, 'Багин Даниил Станиславович', 'НТС', 'approved');
 
 -- --------------------------------------------------------
 
@@ -128,24 +131,27 @@ INSERT INTO `users` (`id`, `name`, `phone`, `login`, `password`, `role`) VALUES
 --
 
 --
--- Индексы таблицы `clients`
+-- Индексы таблицы `applications`
 --
-ALTER TABLE `clients`
-  ADD PRIMARY KEY (`id`);
+ALTER TABLE `applications`
+  ADD PRIMARY KEY (`id`),
+  ADD KEY `property_id` (`property_id`);
 
 --
 -- Индексы таблицы `properties`
 --
 ALTER TABLE `properties`
   ADD PRIMARY KEY (`id`),
-  ADD KEY `user_id` (`user_id`);
+  ADD KEY `user_id` (`user_id`),
+  ADD KEY `buyer_application_id` (`buyer_application_id`);
 
 --
 -- Индексы таблицы `reviews`
 --
 ALTER TABLE `reviews`
   ADD PRIMARY KEY (`id`),
-  ADD KEY `property_id` (`property_id`);
+  ADD KEY `property_id` (`property_id`),
+  ADD KEY `application_id` (`application_id`);
 
 --
 -- Индексы таблицы `users`
@@ -159,22 +165,22 @@ ALTER TABLE `users`
 --
 
 --
--- AUTO_INCREMENT для таблицы `clients`
+-- AUTO_INCREMENT для таблицы `applications`
 --
-ALTER TABLE `clients`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=10;
+ALTER TABLE `applications`
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=4;
 
 --
 -- AUTO_INCREMENT для таблицы `properties`
 --
 ALTER TABLE `properties`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=8;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=10;
 
 --
 -- AUTO_INCREMENT для таблицы `reviews`
 --
 ALTER TABLE `reviews`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=6;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=9;
 
 --
 -- AUTO_INCREMENT для таблицы `users`
@@ -187,16 +193,24 @@ ALTER TABLE `users`
 --
 
 --
+-- Ограничения внешнего ключа таблицы `applications`
+--
+ALTER TABLE `applications`
+  ADD CONSTRAINT `applications_ibfk_1` FOREIGN KEY (`property_id`) REFERENCES `properties` (`id`);
+
+--
 -- Ограничения внешнего ключа таблицы `properties`
 --
 ALTER TABLE `properties`
-  ADD CONSTRAINT `properties_ibfk_1` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`);
+  ADD CONSTRAINT `properties_ibfk_1` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`),
+  ADD CONSTRAINT `properties_ibfk_2` FOREIGN KEY (`buyer_application_id`) REFERENCES `applications` (`id`);
 
 --
 -- Ограничения внешнего ключа таблицы `reviews`
 --
 ALTER TABLE `reviews`
-  ADD CONSTRAINT `reviews_ibfk_1` FOREIGN KEY (`property_id`) REFERENCES `properties` (`id`);
+  ADD CONSTRAINT `reviews_ibfk_1` FOREIGN KEY (`property_id`) REFERENCES `properties` (`id`),
+  ADD CONSTRAINT `reviews_ibfk_2` FOREIGN KEY (`application_id`) REFERENCES `applications` (`id`);
 COMMIT;
 
 /*!40101 SET CHARACTER_SET_CLIENT=@OLD_CHARACTER_SET_CLIENT */;

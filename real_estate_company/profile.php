@@ -17,6 +17,19 @@ $properties = $connect->query("SELECT * FROM properties WHERE user_id = $user_id
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <script src="https://cdn.tailwindcss.com"></script>
     <title>Профиль</title>
+    <style>
+        .menu-transition {
+            transition: transform 0.3s ease-in-out;
+        }
+        .menu-hidden {
+            transform: translateX(-100%);
+        }
+        @media (min-width: 768px) {
+            .menu-hidden {
+                transform: none;
+            }
+        }
+    </style>
     <script>
         function previewImage(event) {
             const preview = document.getElementById('imagePreview');
@@ -73,19 +86,33 @@ $properties = $connect->query("SELECT * FROM properties WHERE user_id = $user_id
         });
     </script>
 </head>
-<body class="bg-emerald-200 p-8">
+<body class="bg-emerald-200 p-4 md:p-8">
     <div class="max-w-4xl mx-auto">
-        <div class="flex justify-between items-center mb-8">
-            <h1 class="text-2xl">Добро пожаловать, <?= $_SESSION['user']['name'] ?></h1>
-            <div class="flex gap-4">
-                <a href="index.php" class="text-emerald-900 hover:text-emerald-700">На главную</a>
-                <?php if($_SESSION['user']['role'] === 'admin'): ?>
-                    <a href="./admin_res/admin.php" class="text-emerald-900 hover:text-emerald-700">Админ-панель</a>
-                <?php endif; ?>
-                <a href="./vendor/logout.php" class="text-red-600 hover:text-red-800">Выйти</a>
+        <!-- Адаптивная шапка -->
+        <header class="bg-emerald-900 text-white rounded-lg p-4 mb-8">
+            <div class="flex flex-col md:flex-row justify-between items-center relative">
+                <div class="flex justify-between w-full md:w-auto items-center mb-4 md:mb-0">
+                    <h1 class="text-xl md:text-2xl">Личный кабинет</h1>
+                    <button id="burger-btn" class="md:hidden">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16m-16 6h16"></path>
+                        </svg>
+                    </button>
+                </div>
+                
+                <nav id="mobile-menu" class="menu-transition menu-hidden md:transform-none w-full md:w-auto h-0 md:h-auto overflow-hidden">
+                    <ul class="flex flex-col md:flex-row gap-4 md:gap-8 items-center">
+                        <li>Добро пожаловать, <?= $_SESSION['user']['name'] ?></li>
+                        <li><a href="index.php" class="hover:text-emerald-300">На главную</a></li>
+                        <?php if($_SESSION['user']['role'] === 'admin'): ?>
+                            <li><a href="./admin_res/admin.php" class="hover:text-emerald-300">Админ-панель</a></li>
+                        <?php endif; ?>
+                        <li><a href="./vendor/logout.php" class="text-red-300 hover:text-red-400">Выйти</a></li>
+                    </ul>
+                </nav>
             </div>
-        </div>
-        
+        </header>
+
         <h2 class="text-xl mb-4">Мои объекты недвижимости</h2>
         
         <form method="POST" action="./vendor/add_property.php" class="mb-8 bg-emerald-600 p-4 rounded" enctype="multipart/form-data">
@@ -184,114 +211,126 @@ $properties = $connect->query("SELECT * FROM properties WHERE user_id = $user_id
                                 ($property['type'] == 'garage' ? 'Гараж' : 'Коммерческая недвижимость'))) 
                         ?>
                         </h3>
-                        <div class="flex items-start gap-2">
-                            <span class="px-2 py-1 rounded text-sm <?= 
-                                $property['status'] == 'new' ? 'bg-blue-100 text-blue-800' : 
-                                ($property['status'] == 'solved' ? 'bg-green-100 text-green-800' : 
-                                'bg-red-100 text-red-800') 
-                            ?>">
-                                <?= $property['status'] == 'new' ? 'На рассмотрении' : 
-                                    ($property['status'] == 'solved' ? 'Одобрено' : 'Отклонено') 
-                                ?>
-                            </span>
-                            <?php if($property['status'] == 'new'): ?>
-                                <form method="POST" action="./vendor/delete_property.php" 
-                                      onsubmit="return confirm('Вы уверены, что хотите удалить этот объект?')">
-                                    <input type="hidden" name="property_id" value="<?= $property['id'] ?>">
-                                    <button type="submit" 
-                                            class="text-red-600 hover:text-red-800 text-sm px-2 py-1">
-                                        ✕
-                                    </button>
-                                </form>
-                            <?php endif; ?>
-                        </div>
-                    </div>
-                    <div class="space-y-2">
-                        <p><span class="font-medium">Адрес:</span> <?= htmlspecialchars($property['address']) ?></p>
-                        <p><span class="font-medium">Район:</span> <?= htmlspecialchars($property['district']) ?></p>
-                        <p><span class="font-medium">Цена:</span> <?= number_format($property['price'], 0, ',', ' ') ?> ₽</p>
-                        <p><span class="font-medium">Площадь:</span> <?= $property['area'] ?> м²</p>
-                        
-                        <?php if(in_array($property['type'], ['house', 'apartment']) && $property['rooms']): ?>
-                            <p><span class="font-medium">Комнат:</span> <?= $property['rooms'] ?></p>
-                        <?php endif; ?>
-                        
-                        <?php if($property['type'] == 'house'): ?>
-                            <?php if($property['floors']): ?>
-                                <p><span class="font-medium">Этажей:</span> <?= $property['floors'] ?></p>
-                            <?php endif; ?>
-                            <?php if($property['material']): ?>
-                                <p><span class="font-medium">Материал:</span> 
-                                    <?= $property['material'] == 'brick' ? 'Кирпич' : 
-                                       ($property['material'] == 'stone' ? 'Камень' : 'Бревно') ?>
-                                </p>
-                            <?php endif; ?>
-                            <?php if($property['land_area']): ?>
-                                <p><span class="font-medium">Площадь участка:</span> <?= $property['land_area'] ?> сот.</p>
-                            <?php endif; ?>
-                        <?php endif; ?>
-                        
-                        <?php if($property['type'] == 'land' && $property['land_category']): ?>
-                            <p><span class="font-medium">Категория земель:</span> 
-                                <?= $property['land_category'] == 'settlement' ? 'Поселения' : 
-                                   ($property['land_category'] == 'agricultural' ? 'Сельхозназначения' : 'Промназначения') ?>
-                            </p>
-                        <?php endif; ?>
-                        
-                        <?php if($property['type'] == 'garage' && $property['security']): ?>
-                            <p><span class="font-medium">Охрана:</span> 
-                                <?= $property['security'] == 'with_security' ? 'С охраной' : 'Без охраны' ?>
-                            </p>
-                        <?php endif; ?>
-                        
-                        <?php if($property['type'] == 'commercial' && $property['commercial_type']): ?>
-                            <p><span class="font-medium">Вид объекта:</span> 
-                                <?= $property['commercial_type'] == 'office' ? 'Офис' : 
-                                   ($property['commercial_type'] == 'retail' ? 'Торговая площадь' : 'Склад') ?>
-                            </p>
+                        <?php if(!$property['buyer_application_id']): ?>
+                            <form method="POST" action="./vendor/delete_property.php" 
+                                  onsubmit="return confirm('Вы уверены, что хотите удалить объект?')">
+                                <input type="hidden" name="property_id" value="<?= $property['id'] ?>">
+                                <button type="submit" class="text-red-600 hover:text-red-800">
+                                    Удалить
+                                </button>
+                            </form>
                         <?php endif; ?>
                     </div>
-                    
-                    <?php if($property['status'] == 'solved'): ?>
-                        <div class="mt-4 pt-4 border-t">
-                            <?php
-                            // Проверяем, есть ли уже отзыв для этого объекта
-                            $existing_review = $connect->query("SELECT * FROM reviews WHERE property_id = {$property['id']} AND fio = '{$_SESSION['user']['name']}'");
-                            if($review = mysqli_fetch_assoc($existing_review)):
-                            ?>
-                                <div class="bg-gray-50 p-4 rounded">
-                                    <div class="flex justify-between items-start mb-3">
-                                        <h4 class="font-medium">Ваш отзыв</h4>
-                                        <form method="POST" action="./vendor/delete_review.php" 
-                                              onsubmit="return confirm('Вы уверены, что хотите удалить отзыв?')">
-                                            <input type="hidden" name="review_id" value="<?= $review['id'] ?>">
-                                            <button type="submit" class="text-red-600 hover:text-red-800 text-sm">
-                                                Удалить отзыв
-                                            </button>
-                                        </form>
-                                    </div>
-                                    <h5 class="font-medium mb-2"><?= htmlspecialchars($review['title']) ?></h5>
-                                    <p class="text-gray-600"><?= htmlspecialchars($review['review']) ?></p>
-                                </div>
-                            <?php else: ?>
-                                <h4 class="font-medium mb-2">Оставить отзыв</h4>
-                                <form method="POST" action="./vendor/back_review.php" class="space-y-3">
-                                    <input type="hidden" name="property_id" value="<?= $property['id'] ?>">
-                                    <input type="text" name="title" placeholder="Заголовок отзыва" 
-                                           class="w-full rounded p-2 border" required>
-                                    <textarea name="review" placeholder="Текст отзыва" 
-                                            class="w-full rounded p-2 border" required></textarea>
-                                    <button type="submit" 
-                                            class="bg-emerald-900 text-white px-4 py-2 rounded hover:bg-emerald-700">
-                                        Отправить отзыв
-                                    </button>
-                                </form>
-                            <?php endif; ?>
-                        </div>
-                    <?php endif; ?>
+                    <p class="text-gray-600 mb-2">Район: <?= htmlspecialchars($property['district']) ?></p>
+                    <p class="text-gray-600 mb-2">Адрес: <?= htmlspecialchars($property['address']) ?></p>
+                    <p class="text-emerald-600 font-semibold">
+                        Цена: <?= number_format($property['price'], 0, ',', ' ') ?> ₽
+                    </p>
                 </div>
             <?php endwhile; ?>
         </div>
+
+        <!-- Добавляем секцию для объектов с покупателями -->
+        <div class="mt-8">
+            <h3 class="text-xl font-semibold mb-4">Проданные объекты</h3>
+            <?php
+            // Получаем объекты текущего пользователя с назначенными покупателями
+            $sold_properties = $connect->query("
+                SELECT p.*, a.client_name as buyer_name, a.phone as buyer_phone 
+                FROM properties p 
+                JOIN applications a ON p.buyer_application_id = a.id 
+                WHERE p.user_id = {$_SESSION['user']['id']}
+            ");
+            ?>
+            
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <?php while($property = mysqli_fetch_assoc($sold_properties)): ?>
+                    <div class="bg-white p-6 rounded-lg shadow">
+                        <h4 class="font-semibold mb-2">
+                            <?= $property['type'] == 'house' ? 'Частный дом' : 
+                                ($property['type'] == 'apartment' ? 'Квартира' : 
+                                ($property['type'] == 'land' ? 'Земельный участок' : 
+                                ($property['type'] == 'garage' ? 'Гараж' : 'Коммерческая недвижимость'))) 
+                            ?>
+                        </h4>
+                        <p class="text-gray-600 mb-2">Адрес: <?= htmlspecialchars($property['address']) ?></p>
+                        <p class="text-gray-600 mb-4">Покупатель: <?= htmlspecialchars($property['buyer_name']) ?></p>
+                        
+                        <!-- Форма для отзыва -->
+                        <?php
+                        // Проверяем, есть ли уже отзыв для этого объекта
+                        $existing_review = $connect->query("SELECT * FROM reviews WHERE property_id = {$property['id']}");
+                        if($existing_review->num_rows > 0):
+                            $review = mysqli_fetch_assoc($existing_review);
+                        ?>
+                            <div class="mt-4 p-4 bg-gray-50 rounded-lg">
+                                <h5 class="font-semibold mb-2">Ваш отзыв</h5>
+                                <p class="text-gray-700 mb-2"><?= htmlspecialchars($review['title']) ?></p>
+                                <p class="text-gray-600 mb-2"><?= htmlspecialchars($review['review']) ?></p>
+                                <p class="mt-2">
+                                    Статус: 
+                                    <span class="px-2 py-1 rounded-full text-sm <?= 
+                                        $review['status'] === 'approved' ? 'bg-green-100 text-green-800' : 
+                                        ($review['status'] === 'rejected' ? 'bg-red-100 text-red-800' : 'bg-yellow-100 text-yellow-800') 
+                                    ?>">
+                                        <?= $review['status'] === 'approved' ? 'Одобрен' : 
+                                            ($review['status'] === 'rejected' ? 'Отклонен' : 'На рассмотрении') ?>
+                                    </span>
+                                </p>
+                            </div>
+                        <?php else: ?>
+                            <form action="./vendor/back_review.php" method="POST" class="mt-4">
+                                <input type="hidden" name="property_id" value="<?= $property['id'] ?>">
+                                <div class="space-y-3">
+                                    <div>
+                                        <label class="block text-sm font-medium text-gray-700 mb-1">Заголовок отзыва</label>
+                                        <input type="text" name="title" required 
+                                               class="w-full rounded-md border-2 border-emerald-200 shadow-sm p-2">
+                                    </div>
+                                    <div>
+                                        <label class="block text-sm font-medium text-gray-700 mb-1">Текст отзыва</label>
+                                        <textarea name="review" required rows="3" 
+                                                  class="w-full rounded-md border-2 border-emerald-200 shadow-sm p-2"></textarea>
+                                    </div>
+                                    <button type="submit" 
+                                            class="w-full bg-emerald-600 text-white px-4 py-2 rounded-md hover:bg-emerald-700 transition duration-300">
+                                        Оставить отзыв
+                                    </button>
+                                </div>
+                            </form>
+                        <?php endif; ?>
+                    </div>
+                <?php endwhile; ?>
+            </div>
+        </div>
     </div>
+
+    <script>
+        const burgerBtn = document.getElementById('burger-btn');
+        const mobileMenu = document.getElementById('mobile-menu');
+        let isMenuOpen = false;
+
+        burgerBtn.addEventListener('click', () => {
+            isMenuOpen = !isMenuOpen;
+            if (isMenuOpen) {
+                mobileMenu.classList.remove('menu-hidden');
+                mobileMenu.style.height = mobileMenu.scrollHeight + 'px';
+            } else {
+                mobileMenu.classList.add('menu-hidden');
+                mobileMenu.style.height = '0';
+            }
+        });
+
+        // Обновляем обработчик изменения размера окна
+        window.addEventListener('resize', () => {
+            if (window.innerWidth >= 768) {
+                mobileMenu.style.height = 'auto';
+                mobileMenu.classList.remove('menu-hidden');
+            } else if (!isMenuOpen) {
+                mobileMenu.style.height = '0';
+                mobileMenu.classList.add('menu-hidden');
+            }
+        });
+    </script>
 </body>
 </html>

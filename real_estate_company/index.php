@@ -1,14 +1,27 @@
 <?php
 session_start();
 require_once "./vendor/connect.php";
-$reviews = $connect->query("SELECT r.*, p.address, p.type 
-                          FROM reviews r 
-                          JOIN properties p ON r.property_id = p.id 
-                          WHERE p.status = 'solved'");
-$reviews = mysqli_fetch_all($reviews);
 
-// Добавим обработку фильтров (после session_start(), около строки 3)
-$where_conditions = ["status = 'new'"]; // Базовое условие
+// Получаем все отзывы с изображениями объектов
+$reviews_query = "
+    SELECT r.*, p.address, p.type, p.image 
+    FROM reviews r 
+    JOIN properties p ON r.property_id = p.id 
+    WHERE r.status = 'approved'  
+    ORDER BY r.id DESC
+";
+
+$reviews = $connect->query($reviews_query);
+
+if (!$reviews) {
+    // Выводим ошибку для отладки
+    die("Ошибка запроса отзывов: " . $connect->error);
+}
+?>
+
+<?
+// Обновляем базовое условие WHERE
+$where_conditions = ["buyer_application_id IS NULL"]; // Показываем только объекты без покупателя
 $params = [];
 
 if (isset($_GET['type']) && $_GET['type'] !== '') {
@@ -92,21 +105,32 @@ if (isset($_GET['max_land_area']) && $_GET['max_land_area'] !== '') {
 $where_clause = implode(' AND ', $where_conditions);
 
 // Получаем уникальные районы для фильтра
-$districts = $connect->query("SELECT DISTINCT district FROM properties WHERE status = 'new' ORDER BY district");
+$districts = $connect->query("SELECT DISTINCT district FROM properties ORDER BY district");
 
 // Подготавливаем и выполняем запрос с фильтрами
 $query = "SELECT * FROM properties WHERE $where_clause ORDER BY id DESC";
 $stmt = $connect->prepare($query);
 
-if (!empty($params)) {
-    $types = str_repeat('s', count($params)); // 's' для строк
-    $stmt->bind_param($types, ...$params);
+if (!$stmt) {
+    // Обработка ошибки подготовки запроса
+    die("Ошибка подготовки запроса: " . $connect->error);
 }
 
-$stmt->execute();
+if (!empty($params)) {
+    $types = str_repeat('s', count($params));
+    if (!$stmt->bind_param($types, ...$params)) {
+        // Обработка ошибки привязки параметров
+        die("Ошибка привязки параметров: " . $stmt->error);
+    }
+}
+
+if (!$stmt->execute()) {
+    // Обработка ошибки выполнения запроса
+    die("Ошибка выполнения запроса: " . $stmt->error);
+}
+
 $properties = $stmt->get_result();
 
-// Добавим JavaScript для инициализации полей фильтра
 ?>
 <script>
     function toggleFilterFields(type) {
@@ -156,23 +180,45 @@ $properties = $stmt->get_result();
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <script src="https://cdn.tailwindcss.com"></script>
     <title>Document</title>
+    <!-- Добавляем стили для анимации -->
+    <style>
+        .menu-transition {
+            transition: transform 0.3s ease-in-out;
+        }
+        .menu-hidden {
+            transform: translateX(-100%);
+        }
+        @media (min-width: 768px) {
+            .menu-hidden {
+                transform: none;
+            }
+        }
+    </style>
 </head>
 
 <body class="min-h-screen bg-emerald-200">
-    <header class="bg-emerald-900 text-white sticky top-0 z-10 opacity-80">
-        <div class="flex justify-between w-3/4 ml-auto mr-auto h-20 items-center">
-            <div>
+    <header class="bg-emerald-900 text-white sticky top-0 z-10">
+        <div class="flex flex-col md:flex-row justify-between w-full md:w-3/4 mx-auto p-4 md:h-20 items-center relative">
+            <!-- Логотип -->
+            <div class="flex justify-between w-full md:w-auto items-center">
                 <a href="./index.php">
                     <p class="text-xl font-bold">Город</p>
                     <p class="text-xs">Агентство недвижимости</p>
                 </a>
+                <!-- Бургер кнопка -->
+                <button id="burger-btn" class="md:hidden">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16m-16 6h16"></path>
+                    </svg>
+                </button>
             </div>
-            <div>
-                <ul class="flex text-lg gap-10 font-semibold ">
-                    <li class="hover:scale-125 transition duration-300"><a href="#offers">Услуги</a></li>
+
+            <!-- Мобильное меню -->
+            <nav id="mobile-menu" class="menu-transition menu-hidden md:transform-none w-full md:w-auto bg-emerald-900 md:bg-transparent absolute md:relative top-full md:top-auto left-0 md:left-auto">
+                <ul class="flex flex-col md:flex-row text-lg gap-4 md:gap-10 font-semibold items-center p-4 md:p-0">
+                    <li class="hover:scale-125 transition duration-300"><a href="#catalog">Каталог</a></li>
                     <li class="hover:scale-125 transition duration-300"><a href="#comments">Отзывы</a></li>
                     <li class="hover:scale-125 transition duration-300"><a href="#about_us">О нас</a></li>
-                    <li class="hover:scale-125 transition duration-300"><a href="#contacts">Контакты</a></li>
                     <?php if(isset($_SESSION['user'])): ?>
                         <li class="hover:scale-125 transition duration-300">
                             <a href="<?= $_SESSION['user']['role'] === 'admin' ? './admin_res/admin.php' : './profile.php' ?>">
@@ -183,23 +229,61 @@ $properties = $stmt->get_result();
                         <li class="hover:scale-125 transition duration-300"><a href="./login.php">Войти</a></li>
                         <li class="hover:scale-125 transition duration-300"><a href="./register.php">Регистрация</a></li>
                     <?php endif; ?>
-                    <li class="">
+                    <li class="text-center md:text-left">
                         <p>+7 (0000) 000-000</p>
                     </li>
                 </ul>
-            </div>
+            </nav>
         </div>
     </header>
+
+    <!-- Добавляем JavaScript для управления меню в конец body -->
+    <script>
+        const burgerBtn = document.getElementById('burger-btn');
+        const mobileMenu = document.getElementById('mobile-menu');
+        let isMenuOpen = false;
+
+        burgerBtn.addEventListener('click', () => {
+            isMenuOpen = !isMenuOpen;
+            if (isMenuOpen) {
+                mobileMenu.classList.remove('menu-hidden');
+            } else {
+                mobileMenu.classList.add('menu-hidden');
+            }
+        });
+
+        // Закрываем меню при клике на ссылку
+        document.querySelectorAll('#mobile-menu a').forEach(link => {
+            link.addEventListener('click', () => {
+                if (window.innerWidth < 768) {
+                    mobileMenu.classList.add('menu-hidden');
+                    isMenuOpen = false;
+                }
+            });
+        });
+
+        // Обработка изменения размера окна
+        window.addEventListener('resize', () => {
+            if (window.innerWidth >= 768) {
+                mobileMenu.classList.remove('menu-hidden');
+            } else if (!isMenuOpen) {
+                mobileMenu.classList.add('menu-hidden');
+            }
+        });
+    </script>
+
     <main>
-    <div class="w-2/3 ml-auto mr-auto mt-24">
-            <h2 class="text-3xl font-bold text-center mb-8">Каталог недвижимости</h2>
+    <div class="w-full md:w-2/3 mx-auto mt-8 md:mt-24 px-4 md:px-0" id="catalog">
+            <h2 class="text-2xl md:text-3xl font-bold text-center mb-8">Каталог недвижимости</h2>
             
             <!-- Форма фильтров -->
-            <form method="GET" class="bg-white p-6 rounded-lg shadow mb-8">
-                <div class="grid grid-cols-3 gap-4">
+            <form method="GET" class="bg-white p-4 md:p-6 rounded-lg shadow mb-8">
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                     <div>
                         <label class="block text-sm font-medium text-gray-700 mb-1">Тип недвижимости</label>
-                        <select name="type" class="w-full rounded-md border-gray-300 shadow-sm" onchange="toggleFilterFields(this.value)">
+                        <select name="type" 
+                                class="w-full rounded-md border-2 border-emerald-200 shadow-sm p-2 focus:border-emerald-500 focus:ring focus:ring-emerald-200 focus:ring-opacity-50"
+                                onchange="toggleFilterFields(this.value)">
                             <option value="">Все типы</option>
                             <option value="house" <?= isset($_GET['type']) && $_GET['type'] === 'house' ? 'selected' : '' ?>>Частный дом</option>
                             <option value="apartment" <?= isset($_GET['type']) && $_GET['type'] === 'apartment' ? 'selected' : '' ?>>Квартира</option>
@@ -211,7 +295,8 @@ $properties = $stmt->get_result();
                     
                     <div>
                         <label class="block text-sm font-medium text-gray-700 mb-1">Район</label>
-                        <select name="district" class="w-full rounded-md border-gray-300 shadow-sm">
+                        <select name="district" 
+                                class="w-full rounded-md border-2 border-emerald-200 shadow-sm p-2 focus:border-emerald-500 focus:ring focus:ring-emerald-200 focus:ring-opacity-50">
                             <option value="">Все районы</option>
                             <?php while($district = mysqli_fetch_assoc($districts)): ?>
                                 <option value="<?= $district['district'] ?>" 
@@ -240,24 +325,32 @@ echo "                      <option value='6' " . (isset($_GET['rooms']) && $_GE
                     <div>
                         <label class="block text-sm font-medium text-gray-700 mb-1">Цена, ₽</label>
                         <div class="flex gap-2">
-                            <input type="number" name="min_price" placeholder="От" 
+                            <input type="number" 
+                                   name="min_price" 
+                                   placeholder="От" 
                                    value="<?= $_GET['min_price'] ?? '' ?>"
-                                   class="w-full rounded-md border-gray-300 shadow-sm">
-                            <input type="number" name="max_price" placeholder="До" 
+                                   class="w-full rounded-md border-2 border-emerald-200 shadow-sm p-2 focus:border-emerald-500 focus:ring focus:ring-emerald-200 focus:ring-opacity-50">
+                            <input type="number" 
+                                   name="max_price" 
+                                   placeholder="До" 
                                    value="<?= $_GET['max_price'] ?? '' ?>"
-                                   class="w-full rounded-md border-gray-300 shadow-sm">
+                                   class="w-full rounded-md border-2 border-emerald-200 shadow-sm p-2 focus:border-emerald-500 focus:ring focus:ring-emerald-200 focus:ring-opacity-50">
                         </div>
                     </div>
                     
                     <div>
                         <label class="block text-sm font-medium text-gray-700 mb-1">Площадь, м²</label>
                         <div class="flex gap-2">
-                            <input type="number" name="min_area" placeholder="От" 
+                            <input type="number" 
+                                   name="min_area" 
+                                   placeholder="От" 
                                    value="<?= $_GET['min_area'] ?? '' ?>"
-                                   class="w-full rounded-md border-gray-300 shadow-sm">
-                            <input type="number" name="max_area" placeholder="До" 
+                                   class="w-full rounded-md border-2 border-emerald-200 shadow-sm p-2 focus:border-emerald-500 focus:ring focus:ring-emerald-200 focus:ring-opacity-50">
+                            <input type="number" 
+                                   name="max_area" 
+                                   placeholder="До" 
                                    value="<?= $_GET['max_area'] ?? '' ?>"
-                                   class="w-full rounded-md border-gray-300 shadow-sm">
+                                   class="w-full rounded-md border-2 border-emerald-200 shadow-sm p-2 focus:border-emerald-500 focus:ring focus:ring-emerald-200 focus:ring-opacity-50">
                         </div>
                     </div>
                     
@@ -299,16 +392,16 @@ echo "                      <option value='6' " . (isset($_GET['rooms']) && $_GE
                             <div>
                                 <label class='block text-sm font-medium text-gray-700 mb-1'>Этажей от</label>
                                 <input type='number' name='min_floors' value='" . (isset($_GET['min_floors']) ? $_GET['min_floors'] : '') . "' 
-                                       class='w-full rounded-md border-gray-300 shadow-sm'>
+                                       class='w-full rounded-md border-2 border-emerald-200 shadow-sm p-2 focus:border-emerald-500 focus:ring focus:ring-emerald-200 focus:ring-opacity-50'>
                             </div>
                             <div>
                                 <label class='block text-sm font-medium text-gray-700 mb-1'>Этажей до</label>
                                 <input type='number' name='max_floors' value='" . (isset($_GET['max_floors']) ? $_GET['max_floors'] : '') . "' 
-                                       class='w-full rounded-md border-gray-300 shadow-sm'>
+                                       class='w-full rounded-md border-2 border-emerald-200 shadow-sm p-2 focus:border-emerald-500 focus:ring focus:ring-emerald-200 focus:ring-opacity-50'>
                             </div>
                             <div>
                                 <label class='block text-sm font-medium text-gray-700 mb-1'>Материал</label>
-                                <select name='material' class='w-full rounded-md border-gray-300 shadow-sm'>
+                                <select name='material' class='w-full rounded-md border-2 border-emerald-200 shadow-sm p-2 focus:border-emerald-500 focus:ring focus:ring-emerald-200 focus:ring-opacity-50'>
                                     <option value=''>Любой</option>
                                     <option value='brick' " . (isset($_GET['material']) && $_GET['material'] === 'brick' ? 'selected' : '') . ">Кирпич</option>
                                     <option value='stone' " . (isset($_GET['material']) && $_GET['material'] === 'stone' ? 'selected' : '') . ">Камень</option>
@@ -318,19 +411,19 @@ echo "                      <option value='6' " . (isset($_GET['rooms']) && $_GE
                             <div>
                                 <label class='block text-sm font-medium text-gray-700 mb-1'>Площадь участка от (сот.)</label>
                                 <input type='number' name='min_land_area' value='" . (isset($_GET['min_land_area']) ? $_GET['min_land_area'] : '') . "' 
-                                       class='w-full rounded-md border-gray-300 shadow-sm'>
+                                       class='w-full rounded-md border-2 border-emerald-200 shadow-sm p-2 focus:border-emerald-500 focus:ring focus:ring-emerald-200 focus:ring-opacity-50'>
                             </div>
                             <div>
                                 <label class='block text-sm font-medium text-gray-700 mb-1'>Площадь участка до (сот.)</label>
                                 <input type='number' name='max_land_area' value='" . (isset($_GET['max_land_area']) ? $_GET['max_land_area'] : '') . "' 
-                                       class='w-full rounded-md border-gray-300 shadow-sm'>
+                                       class='w-full rounded-md border-2 border-emerald-200 shadow-sm p-2 focus:border-emerald-500 focus:ring focus:ring-emerald-200 focus:ring-opacity-50'>
                             </div>
                         </div>
                     </div>
                     
                     <div class="flex items-end">
                         <button type="submit" 
-                                class="w-full bg-emerald-600 text-white px-4 py-2 rounded-md hover:bg-emerald-700 transition duration-300">
+                                class="w-full bg-emerald-600 text-white px-4 py-3 rounded-md hover:bg-emerald-700 transition duration-300 border-2 border-emerald-600 hover:border-emerald-700">
                             Применить фильтры
                         </button>
                     </div>
@@ -338,155 +431,107 @@ echo "                      <option value='6' " . (isset($_GET['rooms']) && $_GE
             </form>
 
             <!-- Отображение результатов -->
-            <div class="grid grid-cols-3 gap-6">
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 <?php while($property = mysqli_fetch_assoc($properties)): ?>
-                <div class="bg-gradient-to-b from-emerald-900 to-emerald-700 rounded-xl p-6 text-white">
+                <div class="bg-white rounded-lg shadow-lg overflow-hidden">
                     <?php if($property['image']): ?>
-                        <div class="mb-4 h-48 overflow-hidden rounded-lg">
-                            <img src="<?= $property['image'] ?>" 
-                                 alt="Фото объекта" 
-                                 class="w-full h-full object-cover">
-                        </div>
+                        <img src="<?= $property['image'] ?>" alt="Фото объекта" class="w-full h-48 object-cover">
                     <?php endif; ?>
-                    <h3 class="text-xl font-semibold mb-4">
-                        <?php
-                        switch($property['type']) {
-                            case 'house':
-                                echo 'Частный дом';
-                                break;
-                            case 'apartment':
-                                echo 'Квартира';
-                                break;
-                            case 'land':
-                                echo 'Земельный участок';
-                                break;
-                            case 'garage':
-                                echo 'Гараж';
-                                break;
-                            case 'commercial':
-                                echo 'Коммерческая недвижимость';
-                                break;
-                        }
-                        ?>
-                    </h3>
-                    <div class="space-y-2">
-                        <!-- Основные характеристики -->
-                        <p><span class="font-medium">Адрес:</span> <?= htmlspecialchars($property['address']) ?></p>
-                        <p><span class="font-medium">Район:</span> <?= htmlspecialchars($property['district']) ?></p>
-                        <p><span class="font-medium">Цена:</span> <?= number_format($property['price'], 0, ',', ' ') ?> ₽</p>
-                        <p><span class="font-medium">Площадь:</span> <?= $property['area'] ?> м²</p>
-                        
-                        <!-- Характеристики для домов и квартир -->
-                        <?php if(in_array($property['type'], ['house', 'apartment']) && $property['rooms']): ?>
-                            <p><span class="font-medium">Комнат:</span> <?= $property['rooms'] ?></p>
-                        <?php endif; ?>
-                        
-                        <!-- Характеристики для домов -->
-                        <?php if($property['type'] == 'house'): ?>
-                            <?php if($property['floors']): ?>
-                                <p><span class="font-medium">Этажей:</span> <?= $property['floors'] ?></p>
-                            <?php endif; ?>
-                            <?php if($property['material']): ?>
-                                <p><span class="font-medium">Материал:</span> 
-                                    <?= $property['material'] == 'brick' ? 'Кирпич' : 
-                                       ($property['material'] == 'stone' ? 'Камень' : 'Бревно') ?>
-                                </p>
-                            <?php endif; ?>
-                            <?php if($property['land_area']): ?>
-                                <p><span class="font-medium">Площадь участка:</span> <?= $property['land_area'] ?> сот.</p>
-                            <?php endif; ?>
-                        <?php endif; ?>
-                        
-                        <!-- Остальные специфические характеристики -->
-                        <?php if($property['type'] == 'land' && $property['land_category']): ?>
-                            <p><span class="font-medium">Категория земель:</span> 
-                                <?= $property['land_category'] == 'settlement' ? 'Поселения' : 
-                                   ($property['land_category'] == 'agricultural' ? 'Сельхозназначения' : 'Промназначения') ?>
-                            </p>
-                        <?php endif; ?>
-                        
-                        <?php if($property['type'] == 'garage' && $property['security']): ?>
-                            <p><span class="font-medium">Охрана:</span> 
-                                <?= $property['security'] == 'with_security' ? 'С охраной' : 'Без охраны' ?>
-                            </p>
-                        <?php endif; ?>
-                        
-                        <?php if($property['type'] == 'commercial' && $property['commercial_type']): ?>
-                            <p><span class="font-medium">Вид объекта:</span> 
-                                <?= $property['commercial_type'] == 'office' ? 'Офис' : 
-                                   ($property['commercial_type'] == 'retail' ? 'Торговая площадь' : 'Склад') ?>
-                            </p>
-                        <?php endif; ?>
+                    
+                    <div class="p-4">
+                        <h3 class="text-xl font-semibold mb-2">
+                            <?= $property['type'] == 'house' ? 'Частный дом' : 
+                                ($property['type'] == 'apartment' ? 'Квартира' : 
+                                ($property['type'] == 'land' ? 'Земельный участок' : 
+                                ($property['type'] == 'garage' ? 'Гараж' : 'Коммерческая недвижимость'))) 
+                            ?>
+                        </h3>
+                        <p class="text-gray-600 mb-2">Район: <?= htmlspecialchars($property['district']) ?></p>
+                        <p class="text-gray-600 mb-2">Адрес: <?= htmlspecialchars($property['address']) ?></p>
+                        <p class="text-emerald-600 font-semibold mb-4">
+                            Цена: <?= number_format($property['price'], 0, ',', ' ') ?> ₽
+                        </p>
+
+                        <!-- Форма заявки -->
+                        <form action="./vendor/add_application.php" method="POST" class="mt-4 space-y-3">
+                            <input type="hidden" name="property_id" value="<?= $property['id'] ?>">
+                            
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Ваше ФИО</label>
+                                <input type="text" 
+                                       name="client_name" 
+                                       required 
+                                       class="w-full rounded-md border-2 border-emerald-200 shadow-sm p-2 focus:border-emerald-500 focus:ring focus:ring-emerald-200 focus:ring-opacity-50">
+                            </div>
+                            
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Номер телефона</label>
+                                <input type="tel" 
+                                       name="phone" 
+                                       required 
+                                       pattern="[0-9+\s\-\(\)]+" 
+                                       class="w-full rounded-md border-2 border-emerald-200 shadow-sm p-2 focus:border-emerald-500 focus:ring focus:ring-emerald-200 focus:ring-opacity-50">
+                            </div>
+                            
+                            <button type="submit" 
+                                    class="w-full bg-emerald-600 text-white px-4 py-2 rounded-md hover:bg-emerald-700 transition duration-300">
+                                Оставить заявку
+                            </button>
+                        </form>
                     </div>
-                    <button class="w-full bg-emerald-900 hover:bg-emerald-600 transition duration-300 py-2 px-4 rounded-xl">
-                        Подробнее
-                    </button>
                 </div>
                 <?php endwhile; ?>
             </div>
         </div>
         <div
-            class="flex justify-between w-2/3 ml-auto mr-auto items-center mt-52 p-7 pl-11 pr-11 rounded-xl text-white bg-gradient-to-l from-emerald-900 to-emerald-700">
-            <div class="flex flex-col gap-10">
-                <h1 class="text-7xl">
-                    Быстро найдём <br> покупателя на <br> Вашу квартиру!
+            class="flex flex-col md:flex-row justify-between w-full md:w-2/3 mx-auto items-center mt-12 md:mt-52 p-4 md:p-7 rounded-xl text-white bg-gradient-to-l from-emerald-900 to-emerald-700">
+            <div class="flex flex-col gap-6 md:gap-10 text-center md:text-left mb-6 md:mb-0">
+                <h1 class="text-4xl md:text-7xl">
+                    Быстро найдём <br class="hidden md:block"> покупателя на <br class="hidden md:block"> Вашу квартиру!
                 </h1>
-                <p class="text-xl">А также проконсультируем <br> по всем интересующим вас вопросам!</p>
-                <div class="flex justify-left text-white font-semibold">
+                <p class="text-lg md:text-xl">А также проконсультируем <br class="hidden md:block"> по всем интересующим вас вопросам!</p>
+                <!-- <div class="flex justify-center md:justify-start">
                     <form action="./application.php">
-                        <input
-                            class="bg-emerald-900 hover:scale-125 hover:bg-emerald-600 transition duration-300 p-5 rounded-xl"
-                            type="submit" value="ОСТАВИТЬ ЗАЯВКУ" />
+                        <input class="bg-emerald-900 hover:scale-125 hover:bg-emerald-600 transition duration-300 p-3 md:p-5 rounded-xl" type="submit" value="ОСТАВИТЬ ЗАЯВКУ" />
                     </form>
-                </div>
+                </div> -->
             </div>
-            <img src="img/analog-landscape-city-with-buildings.jpg" class="w-1/2 rounded-xl" alt="Freepik">
+            <img src="img/analog-landscape-city-with-buildings.jpg" class="w-full md:w-1/2 rounded-xl" alt="Freepik">
         </div>
        
 
-        <div class="w-2/3 ml-auto mr-auto mt-24">
-            <h2 class="text-3xl font-bold text-center mb-8" id="comments">Отзывы наших клиентов</h2>
-            <div class="grid grid-cols-3 gap-6">
-                <?php
-                $reviews = $connect->query("SELECT r.*, p.address, p.type, p.price, u.name as client_name 
-                                          FROM reviews r 
-                                          JOIN properties p ON r.property_id = p.id 
-                                          JOIN users u ON r.fio = u.name
-                                          WHERE p.status = 'solved'
-                                          ORDER BY r.id DESC");
-                while($review = mysqli_fetch_assoc($reviews)):
-                ?>
-                    <div class="bg-gradient-to-b from-emerald-900 to-emerald-700 rounded-xl p-6 text-white">
-                        <div class="border-b border-emerald-500 pb-4 mb-4">
-                            <h3 class="text-xl font-semibold mb-2"><?= htmlspecialchars($review['title']) ?></h3>
-                            <p class="text-sm opacity-90">Клиент: <?= htmlspecialchars($review['client_name']) ?></p>
+        <div class="w-full md:w-2/3 mx-auto mt-12 md:mt-24 px-4 md:px-0">
+            <h2 class="text-2xl md:text-3xl font-bold text-center mb-8" id="comments">Отзывы наших клиентов</h2>
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <?php while($review = mysqli_fetch_assoc($reviews)): ?>
+                <div class="bg-white rounded-lg shadow p-6 w-[300px]">
+                    <?php if($review['image']): ?>
+                        <div class="mb-4 h-48 overflow-hidden rounded-lg">
+                            <img src="<?= $review['image'] ?>" 
+                                 alt="Фото объекта" 
+                                 class="w-full h-full object-cover">
                         </div>
-                        <div class="mb-4 text-sm">
-                            <p class="mb-1">
-                                <?= $review['type'] == 'house' ? 'Дом' : 'Квартира' ?> 
-                                по адресу: <?= htmlspecialchars($review['address']) ?>
-                            </p>
-                            <p class="text-emerald-300">
-                                Стоимость: <?= number_format($review['price'], 0, ',', ' ') ?> ₽
-                            </p>
-                        </div>
-                        <p class="italic mb-4"><?= htmlspecialchars($review['review']) ?></p>
-                    </div>
-                <?php endwhile; ?>
+                    <?php endif; ?>
+                    <h3 class="text-xl font-semibold mb-2"><?= htmlspecialchars($review['title']) ?></h3>
+                    <p class="text-gray-600 mb-2">Продавец: <?= htmlspecialchars($review['seller_name']) ?></p>
+                    <p class="text-gray-600 mb-4">Покупатель: <?= htmlspecialchars($review['buyer_name']) ?></p>
+                    <p class="text-gray-800"><?= htmlspecialchars($review['review']) ?></p>
+                </div>
+            <?php endwhile; ?>
             </div>
         </div>
 
-        <div class="flex flex-col gap-5 justify-between ml-auto mr-auto items-center mt-24">
-            <h1 id="about_us" class="text-3xl font-bold">О нас</h1>
-            <div class="grid grid-cols-2 gap-7 w-2/3 ml-auto mr-auto mt-8 text-xl">
-                <div class="rounded-xl text-white bg-gradient-to-l from-emerald-900 to-emerald-700 p-7">
+        <div class="flex flex-col gap-5 justify-between mx-auto items-center mt-12 md:mt-24 px-4 md:px-0">
+            <h1 id="about_us" class="text-2xl md:text-3xl font-bold">О нас</h1>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-7 w-full md:w-2/3 mx-auto mt-8 text-lg md:text-xl">
+                <div class="rounded-xl text-white bg-gradient-to-l from-emerald-900 to-emerald-700 p-4 md:p-7">
                     <p>
                         Наша компания "Город" была основана в 2010 году и за 14 лет работы на рынке недвижимости Москвы
                         зарекомендовала себя как надежный и профессиональный партнер для покупателей, продавцов и
                         арендаторов.
                     </p>
                 </div>
-                <div class="rounded-xl text-white bg-gradient-to-l from-emerald-900 to-emerald-700 p-7">
+                <div class="rounded-xl text-white bg-gradient-to-l from-emerald-900 to-emerald-700 p-4 md:p-7">
                     <p>
                         Мы гордимся тем, что наша команда состоит из опытных риэлторов, каждый из которых имеет
                         сертификаты о прохождении специализированных курсов и тренингов. Многие из наших сотрудников
@@ -497,11 +542,10 @@ echo "                      <option value='6' " . (isset($_GET['rooms']) && $_GE
         </div>
 
     </main>
-    <footer id="contacts" class="sticky top-[100vh] bg-emerald-900 text-white min-h-40 flex items-center mt-32">
-
-        <div class="flex justify-between w-3/4 ml-auto mr-auto items-center">
-            <div class="flex flex-col gap-3">
-                <h2 class="text-2xl font-semibold">Наши контакты</h2>
+    <footer id="contacts" class="sticky top-[100vh] bg-emerald-900 text-white min-h-40 flex items-center mt-12 md:mt-32">
+        <div class="flex flex-col md:flex-row justify-between w-full md:w-3/4 mx-auto p-4 md:p-0">
+            <div class="flex flex-col gap-3 mb-6 md:mb-0 text-center md:text-left">
+                <h2 class="text-xl md:text-2xl font-semibold">Наши контакты</h2>
                 <ul>
                     <li>Адрес: Улица Пушкина дом Колотушкина</li>
                     <li>Телефон: +7 (0000) 000-000</li>
@@ -509,16 +553,14 @@ echo "                      <option value='6' " . (isset($_GET['rooms']) && $_GE
                 </ul>
             </div>
 
-            <div class="flex flex-col gap-3">
-                <h2 class="text-2xl font-semibold">Расписание</h2>
+            <div class="flex flex-col gap-3 text-center md:text-left">
+                <h2 class="text-xl md:text-2xl font-semibold">Расписание</h2>
                 <ul>
                     <li>Работаем по будням с 10:00 до 19:00</li>
                     <li>В субботу с 11:00 до 15:00</li>
                 </ul>
             </div>
-
         </div>
-
     </footer>
 </body>
 
